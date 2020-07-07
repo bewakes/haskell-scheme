@@ -43,12 +43,13 @@ parseHex, parseOct, parseBinary :: String -> Integer
 parseHex hexStr = sum $ zipWith (\p val -> round (intVal val * 16 ** p)) [0..] (reverse hexStr)
     where intVal s = case elemIndex s hexAlphabet of
                        Just x -> fromIntegral x
-                       _ -> error "Invalid hex alphabet"
+                       _      -> error "Invalid hex alphabet"
           hexAlphabet = "0123456789abcdef"
 
 parseOct octStr = sum $ zipWith (\p val -> round (read [val] * 8 ** p)) [0..] (reverse octStr)
 parseBinary binStr = sum $ zipWith (\p val -> round (read [val] * 2 ** p)) [0..] (reverse binStr)
 
+--TODO: negatives
 parseNumber :: Parser LispVal
 parseNumber = try hexadecimal <|> try octal <|> decimal
 
@@ -59,6 +60,7 @@ octal = Number . parseOct <$> ((string "#o" <|> string "#O") >> many1 (oneOf "01
 hexadecimal = Number . parseHex <$> ((string "#x" <|> string "#X") >> many1 (oneOf "0123456789abcdef"))
 binary = Number . parseBinary <$> ((string "#b" <|> string "#B") >> many1 (oneOf "01"))
 
+-- TODO: negatives
 parseFloat :: Parser LispVal
 parseFloat = Float . (\x -> read x :: Float) <$> do
     int <- many1 digit
@@ -66,8 +68,27 @@ parseFloat = Float . (\x -> read x :: Float) <$> do
     dec <- many1 digit
     return $ int ++ [dot] ++ dec
 
+parsePolar :: Parser LispVal
+parsePolar = do
+    Float r <- parseFloat
+    sep <- char '@'
+    Float theta <- parseFloat
+    return $ Complex $ Polar r theta
+
+parseCartesian :: Parser LispVal
+parseCartesian = do
+    Float r <- parseFloat
+    plusminus <- oneOf "+-"
+    Float i <- parseFloat
+    char 'i'
+    return $ Complex $ Cart r (if plusminus == '-' then -i else i)
+
+parseComplex :: Parser LispVal
+parseComplex = try parsePolar <|> parseCartesian
+
 parseExpr :: Parser LispVal
 parseExpr = parseChar
+         <|> parseComplex
          <|> parseFloat
          <|> parseNumber
          <|> parseAtom
