@@ -52,14 +52,23 @@ parseBinary binStr = sum $ zipWith (\p val -> round (read [val] * 2 ** p)) [0..]
 parseNumber :: Parser LispVal
 parseNumber = try hexadecimal <|> try octal <|> decimal
 
+---Parsers for diffrent number bases
 decimal, octal, hexadecimal, binary :: Parser LispVal
 decimal = Number . read <$> many1 digit
 octal = Number . parseOct <$> ((string "#o" <|> string "#O") >> many1 (oneOf "01234567"))
 hexadecimal = Number . parseHex <$> ((string "#x" <|> string "#X") >> many1 (oneOf "0123456789abcdef"))
 binary = Number . parseBinary <$> ((string "#b" <|> string "#B") >> many1 (oneOf "01"))
 
+parseFloat :: Parser LispVal
+parseFloat = Float . (\x -> read x :: Float) <$> do
+    int <- many1 digit
+    dot <- char '.'
+    dec <- many1 digit
+    return $ int ++ [dot] ++ dec
+
 parseExpr :: Parser LispVal
 parseExpr = parseChar
+         <|> parseFloat
          <|> parseNumber
          <|> parseAtom
          <|> parseString

@@ -7,4 +7,5 @@ data LispVal = Atom String
              | String String
              | Bool Bool
              | Char Char
+             | Float Float
              deriving Show
