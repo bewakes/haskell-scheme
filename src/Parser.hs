@@ -1,6 +1,7 @@
 module Parser where
 
 import           Data.List
+import           Data.Ratio
 import           Numeric
 import           System.Environment
 import           Text.ParserCombinators.Parsec hiding (spaces)
@@ -20,14 +21,14 @@ parseEscaped = do
     return [e, c]
 
 parseChar :: Parser LispVal
-parseChar = Char <$> (string "#\\" >> anyChar)
+parseChar = LChar <$> (string "#\\" >> anyChar)
 
 parseString :: Parser LispVal
 parseString = do
     char '"'
     x <- parseEscaped <|> many (noneOf "\"")
     char '"'
-    return $ String x
+    return $ LString x
 
 parseAtom :: Parser LispVal
 parseAtom = do
@@ -35,9 +36,9 @@ parseAtom = do
     rest <- many (letter <|> digit <|> symbol)
     let atom = first:rest
     return $ case atom of
-               "#t" -> Bool True
-               "#f" -> Bool False
-               _    -> Atom atom
+               "#t" -> LBool True
+               "#f" -> LBool False
+               _    -> LAtom atom
 
 parseHex, parseOct, parseBinary :: String -> Integer
 parseHex hexStr = sum $ zipWith (\p val -> round (intVal val * 16 ** p)) [0..] (reverse hexStr)
@@ -55,14 +56,14 @@ parseNumber = try hexadecimal <|> try octal <|> decimal
 
 ---Parsers for diffrent number bases
 decimal, octal, hexadecimal, binary :: Parser LispVal
-decimal = Number . read <$> many1 digit
-octal = Number . parseOct <$> ((string "#o" <|> string "#O") >> many1 (oneOf "01234567"))
-hexadecimal = Number . parseHex <$> ((string "#x" <|> string "#X") >> many1 (oneOf "0123456789abcdef"))
-binary = Number . parseBinary <$> ((string "#b" <|> string "#B") >> many1 (oneOf "01"))
+decimal = LInteger . read <$> many1 digit
+octal = LInteger . parseOct <$> ((string "#o" <|> string "#O") >> many1 (oneOf "01234567"))
+hexadecimal = LInteger . parseHex <$> ((string "#x" <|> string "#X") >> many1 (oneOf "0123456789abcdef"))
+binary = LInteger . parseBinary <$> ((string "#b" <|> string "#B") >> many1 (oneOf "01"))
 
 -- TODO: negatives
 parseFloat :: Parser LispVal
-parseFloat = Float . (\x -> read x :: Float) <$> do
+parseFloat = LFloat . (\x -> read x :: Float) <$> do
     int <- many1 digit
     dot <- char '.'
     dec <- many1 digit
@@ -70,26 +71,34 @@ parseFloat = Float . (\x -> read x :: Float) <$> do
 
 parsePolar :: Parser LispVal
 parsePolar = do
-    Float r <- parseFloat
+    mag <- try parseRational <|> try parseFloat <|> parseNumber
     sep <- char '@'
-    Float theta <- parseFloat
-    return $ Complex $ Polar r theta
+    theta <- try parseRational <|> try parseFloat <|> parseNumber
+    return $ LComplex $ Polar mag theta
 
 parseCartesian :: Parser LispVal
 parseCartesian = do
-    Float r <- parseFloat
+    real <- try parseRational <|> try parseFloat <|> parseNumber
     plusminus <- oneOf "+-"
-    Float i <- parseFloat
+    img <- try parseRational <|> try parseFloat <|> parseNumber
     char 'i'
-    return $ Complex $ Cart r (if plusminus == '-' then -i else i)
+    return $ LComplex $ Cart real (if plusminus == '-' then negateLispReal img else img)
 
 parseComplex :: Parser LispVal
 parseComplex = try parsePolar <|> parseCartesian
 
+parseRational :: Parser LispVal
+parseRational = do
+    (LInteger num) <- decimal
+    char '/'
+    (LInteger den) <- decimal
+    return $ LRational $ toRational (num % den)
+
 parseExpr :: Parser LispVal
 parseExpr = parseChar
-         <|> parseComplex
-         <|> parseFloat
+         <|> try parseComplex
+         <|> try parseRational
+         <|> try parseFloat
          <|> parseNumber
          <|> parseAtom
          <|> parseString
