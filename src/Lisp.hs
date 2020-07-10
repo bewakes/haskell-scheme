@@ -6,7 +6,8 @@ data Complex = Polar LispVal LispVal
 
 data LispVal = LAtom String
              | LList [LispVal]
-             | DottedList [LispVal] LispVal
+             | LVector [LispVal]
+             | LDottedList [LispVal] LispVal
              | LString String
              | LBool Bool
              | LChar Char

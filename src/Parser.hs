@@ -94,14 +94,57 @@ parseRational = do
     (LInteger den) <- decimal
     return $ LRational $ toRational (num % den)
 
+
 parseExpr :: Parser LispVal
-parseExpr = parseChar
+parseExpr = try parseChar -- because vector also consumes '#'
          <|> try parseComplex
          <|> try parseRational
          <|> try parseFloat
          <|> parseNumber
+         <|> parseVector
          <|> parseAtom
          <|> parseString
+         <|> parseQuoted
+         <|> parseCommaList
+         <|> parseBackTicked
+         <|> do char '('
+                x <- try parseList <|> parseDottedList
+                char ')'
+                return x
+
+parseList :: Parser LispVal
+parseList = LList <$> sepBy parseExpr spaces
+
+parseDottedList :: Parser LispVal
+parseDottedList = do
+    head <- endBy parseExpr spaces
+    tail <- char '.' >> spaces >> parseExpr
+    return $ LDottedList head tail
+
+-- Single quote syntactic sugar of Scheme
+parseQuoted :: Parser LispVal
+parseQuoted = do
+    char '\''
+    x <- parseExpr
+    return $ LList [LAtom "quote", x]
+
+parseBackTicked :: Parser LispVal
+parseBackTicked = do
+    char '`'
+    x <- parseExpr
+    return $ LList [LAtom "back-tick", x]
+
+parseCommaList :: Parser LispVal
+parseCommaList = do
+    char ','
+    x <- parseExpr
+    return $ LList [LAtom "comma", x]
+
+parseVector :: Parser LispVal
+parseVector = do
+    char '#'
+    x <- parseExpr
+    return $ LVector [x]
 
 readExpr :: String -> String
 readExpr input = case parse parseExpr "lisp" input of
