@@ -26,6 +26,7 @@ parseEscaped = do
 parseCharNoHash :: Parser LispVal
 parseCharNoHash = LChar <$> (string "\\" >> anyChar)
 
+-- TODO: fix wrong parse when \" is present
 parseString :: Parser LispVal
 parseString = do
     char '"'
@@ -89,8 +90,8 @@ parseComplex = do
      in return $ getComplex pref sep suff
 
 parseExpr :: Parser LispVal
-parseExpr = (hash >> (parseOctalNoHash <|> parseHexNoHash <|> parseBinaryNoHash <|> parseCharNoHash <|> parseVectorNoHash))
-         <|> try parseAtom
+parseExpr = try (hash >> (parseOctalNoHash <|> parseHexNoHash <|> parseBinaryNoHash <|> parseCharNoHash <|> parseVectorNoHash))
+         <|> parseAtom
          <|> try parseComplex
          <|> parseReal
          <|> parseString
@@ -137,7 +138,7 @@ parseVectorNoHash = do
     LList x <- parseList
     return $ LVector x
 
-readExpr :: String -> String
+readExpr :: String -> LispVal
 readExpr input = case parse parseExpr "lisp" input of
-                   Left err  -> "No match: " ++ show err
-                   Right val -> "Found: " ++ show val
+                   Left err  -> LString $ "No match: " ++ show err
+                   Right val -> val
