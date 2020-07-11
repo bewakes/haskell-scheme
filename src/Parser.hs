@@ -24,7 +24,7 @@ parseEscaped = do
     return [e, c]
 
 parseCharNoHash :: Parser LispVal
-parseCharNoHash = LChar <$> (string "#\\" >> anyChar)
+parseCharNoHash = LChar <$> (string "\\" >> anyChar)
 
 parseString :: Parser LispVal
 parseString = do
@@ -44,7 +44,7 @@ parseAtom = do
                _    -> LAtom atom
 
 parseDecimalIntStr :: Parser String
-parseDecimalIntStr = many digit
+parseDecimalIntStr = many1 digit
 
 parseFloatStr :: Parser String
 parseFloatStr = (\a b c -> a ++ [b] ++ c) <$> parseDecimalIntStr <*> char '.' <*> parseDecimalIntStr
@@ -67,8 +67,8 @@ parseReal :: Parser LispVal
 parseReal = do
     number <- parseDecimalIntStr
     rest <- parseDecimalSuffix <|> parseRationalSuffix <|> return ""
-    let getType intStr "" = LInteger $ read number
-        getType intStr ('.':decStr) = LFloat $ read (intStr ++ "." ++ decStr)
+    let getType intStr ('.':decStr) = LFloat $ read (intStr ++ "." ++ decStr)
+        getType intStr "" = LInteger $ read intStr
         getType intStr ('/':denStr) = LRational $ toRational $ read intStr  % read denStr
         in return $ getType number rest
 
@@ -89,21 +89,23 @@ parseComplex = do
      in return $ getComplex pref sep suff
 
 parseExpr :: Parser LispVal
-parseExpr = try (hash >> (parseOctalNoHash <|> parseHexNoHash <|> parseBinaryNoHash <|> parseCharNoHash <|> parseVectorNoHash))
-         <|> parseAtom
+parseExpr = (hash >> (parseOctalNoHash <|> parseHexNoHash <|> parseBinaryNoHash <|> parseCharNoHash <|> parseVectorNoHash))
+         <|> try parseAtom
          <|> try parseComplex
          <|> parseReal
          <|> parseString
          <|> parseQuoted
          <|> parseCommaList
          <|> parseBackTicked
-         <|> do char '('
-                x <- try parseList <|> parseDottedList
-                char ')'
-                return x
+         <|> try parseList
+         <|> parseDottedList
 
 parseList :: Parser LispVal
-parseList = LList <$> sepBy parseExpr spaces
+parseList = do
+    char '('
+    x <- sepBy parseExpr spaces
+    char ')'
+    return $ LList x
 
 parseDottedList :: Parser LispVal
 parseDottedList = do
@@ -121,23 +123,21 @@ parseQuoted = do
 parseBackTicked :: Parser LispVal
 parseBackTicked = do
     char '`'
-    x <- parseExpr
+    x <- parseList
     return $ LList [LAtom "back-tick", x]
 
 parseCommaList :: Parser LispVal
 parseCommaList = do
     char ','
-    x <- parseExpr
+    x <- parseList
     return $ LList [LAtom "comma", x]
 
 parseVectorNoHash :: Parser LispVal
 parseVectorNoHash = do
-    char '('
-    x <- sepBy parseExpr spaces
-    char ')'
+    LList x <- parseList
     return $ LVector x
 
 readExpr :: String -> String
 readExpr input = case parse parseExpr "lisp" input of
                    Left err  -> "No match: " ++ show err
-                   Right val -> show val
+                   Right val -> "Found: " ++ show val
