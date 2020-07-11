@@ -1,7 +1,5 @@
-#t
--2.4
-3@4
--2/3+4i
-"bibek ap\"ndey"
 (/ 2.3 3 (- 4 1))
-(- (+ 4 6 3) 3 5 -2)
+(number? "bibek")
+(integer? (+ 3 4))
+(complex? (- 2 3))
+(complex? 2@3)
