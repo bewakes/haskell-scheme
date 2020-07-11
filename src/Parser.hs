@@ -11,6 +11,9 @@ import           Lisp
 symbol :: Parser Char
 symbol = oneOf "!#$%&|*+-/:<=>?@^_~"
 
+hash :: Parser Char
+hash = char '#'
+
 spaces :: Parser ()
 spaces = skipMany1 space
 
@@ -20,8 +23,8 @@ parseEscaped = do
     c <- oneOf "\"nrt\\"
     return [e, c]
 
-parseChar :: Parser LispVal
-parseChar = LChar <$> (string "#\\" >> anyChar)
+parseCharNoHash :: Parser LispVal
+parseCharNoHash = LChar <$> (string "#\\" >> anyChar)
 
 parseString :: Parser LispVal
 parseString = do
@@ -40,6 +43,12 @@ parseAtom = do
                "#f" -> LBool False
                _    -> LAtom atom
 
+parseDecimalIntStr :: Parser String
+parseDecimalIntStr = many digit
+
+parseFloatStr :: Parser String
+parseFloatStr = (\a b c -> a ++ [b] ++ c) <$> parseDecimalIntStr <*> char '.' <*> parseDecimalIntStr
+
 parseHex, parseOct, parseBinary :: String -> Integer
 parseHex hexStr = sum $ zipWith (\p val -> round (intVal val * 16 ** p)) [0..] (reverse hexStr)
     where intVal s = case elemIndex s hexAlphabet of
@@ -50,59 +59,46 @@ parseHex hexStr = sum $ zipWith (\p val -> round (intVal val * 16 ** p)) [0..] (
 parseOct octStr = sum $ zipWith (\p val -> round (read [val] * 8 ** p)) [0..] (reverse octStr)
 parseBinary binStr = sum $ zipWith (\p val -> round (read [val] * 2 ** p)) [0..] (reverse binStr)
 
+parseDecimalSuffix = (++) <$> string "." <*> parseDecimalIntStr
+parseRationalSuffix = (++) <$> string "/" <*> parseDecimalIntStr
+
+-- TODO: negatives
+parseReal :: Parser LispVal
+parseReal = do
+    number <- parseDecimalIntStr
+    rest <- parseDecimalSuffix <|> parseRationalSuffix <|> return ""
+    let getType intStr "" = LInteger $ read number
+        getType intStr ('.':decStr) = LFloat $ read (intStr ++ "." ++ decStr)
+        getType intStr ('/':denStr) = LRational $ toRational $ read intStr  % read denStr
+        in return $ getType number rest
+
 --TODO: negatives
 parseNumber :: Parser LispVal
 parseNumber = try hexadecimal <|> try octal <|> decimal
 
 ---Parsers for diffrent number bases
 decimal, octal, hexadecimal, binary :: Parser LispVal
-decimal = LInteger . read <$> many1 digit
+decimal = LInteger . read <$> parseDecimalIntStr
 octal = LInteger . parseOct <$> ((string "#o" <|> string "#O") >> many1 (oneOf "01234567"))
 hexadecimal = LInteger . parseHex <$> ((string "#x" <|> string "#X") >> many1 (oneOf "0123456789abcdef"))
 binary = LInteger . parseBinary <$> ((string "#b" <|> string "#B") >> many1 (oneOf "01"))
 
--- TODO: negatives
-parseFloat :: Parser LispVal
-parseFloat = LFloat . (\x -> read x :: Float) <$> do
-    int <- many1 digit
-    dot <- char '.'
-    dec <- many1 digit
-    return $ int ++ [dot] ++ dec
-
-parsePolar :: Parser LispVal
-parsePolar = do
-    mag <- try parseRational <|> try parseFloat <|> parseNumber
-    sep <- char '@'
-    theta <- try parseRational <|> try parseFloat <|> parseNumber
-    return $ LComplex $ Polar mag theta
-
-parseCartesian :: Parser LispVal
-parseCartesian = do
-    real <- try parseRational <|> try parseFloat <|> parseNumber
-    plusminus <- oneOf "+-"
-    img <- try parseRational <|> try parseFloat <|> parseNumber
-    char 'i'
-    return $ LComplex $ Cart real (if plusminus == '-' then negateLispReal img else img)
-
 parseComplex :: Parser LispVal
-parseComplex = try parsePolar <|> parseCartesian
-
-parseRational :: Parser LispVal
-parseRational = do
-    (LInteger num) <- decimal
-    char '/'
-    (LInteger den) <- decimal
-    return $ LRational $ toRational (num % den)
-
+parseComplex = do
+    pref <- parseReal
+    sep <- oneOf "+-@"
+    suff <- parseReal
+    let getComplex p '@' s = LComplex $ Polar p s
+        getComplex p '+' s = LComplex $ Cart p s
+        getComplex p '-' s = LComplex $ Cart p (negateLispReal s)
+     in return $ getComplex pref sep suff
 
 parseExpr :: Parser LispVal
-parseExpr = try parseChar -- because vector also consumes '#'
-         <|> try parseComplex
-         <|> try parseRational
-         <|> try parseFloat
-         <|> parseNumber
-         <|> parseVector
+parseExpr = try (hash >> (parseCharNoHash <|> parseVectorNoHash))
          <|> parseAtom
+         <|> try parseComplex
+         <|> parseReal
+         <|> parseNumber
          <|> parseString
          <|> parseQuoted
          <|> parseCommaList
@@ -140,11 +136,12 @@ parseCommaList = do
     x <- parseExpr
     return $ LList [LAtom "comma", x]
 
-parseVector :: Parser LispVal
-parseVector = do
-    char '#'
-    x <- parseExpr
-    return $ LVector [x]
+parseVectorNoHash :: Parser LispVal
+parseVectorNoHash = do
+    char '('
+    x <- sepBy parseExpr spaces
+    char ')'
+    return $ LVector x
 
 readExpr :: String -> String
 readExpr input = case parse parseExpr "lisp" input of
