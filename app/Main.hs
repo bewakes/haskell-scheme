@@ -9,5 +9,5 @@ import Evaluator
 
 main :: IO ()
 main = do
-    fileContent <- readFile "program.sch"
+    fileContent <- readFile "programs/program.sch"
     print . map (eval . readExpr) . lines $ fileContent

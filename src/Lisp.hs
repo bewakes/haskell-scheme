@@ -24,18 +24,29 @@ instance Num LispVal where
     (LFloat i) + (LInteger j) = LFloat (i + fromInteger j)
     (LInteger i) + (LRational j) = LRational (fromInteger i + j)
     (LRational i) + (LInteger j) = LRational (i + fromInteger j)
+    (LRational i) + (LFloat j) = LRational (i + toRational j)
+    (LFloat i) + (LRational j) = LRational (toRational i + j)
+    (LFloat x) * (LFloat y) = LFloat (x * y)
+    (LRational x) * (LRational y) = LRational (x * y)
 
     (LInteger i) * (LInteger j) = LInteger (i * j)
     (LInteger i) * (LFloat j) = LFloat (fromInteger i * j)
     (LFloat i) * (LInteger j) = LFloat (i * fromInteger j)
     (LInteger i) * (LRational j) = LRational (fromInteger i * j)
     (LRational i) * (LInteger j) = LRational (i * fromInteger j)
+    (LFloat x) * (LRational y) = LRational (toRational x * y)
+    (LRational x) * (LFloat y) = LRational (x * toRational y)
 
     (LInteger i) - (LInteger j) = LInteger (i - j)
     (LInteger i) - (LFloat j) = LFloat (fromInteger i - j)
     (LFloat i) - (LInteger j) = LFloat (i - fromInteger j)
     (LInteger i) - (LRational j) = LRational (fromInteger i - j)
     (LRational i) - (LInteger j) = LRational (i - fromInteger j)
+    (LFloat x) - (LRational y) = LRational (toRational x - y)
+    (LRational x) - (LFloat y) = LRational (x - toRational y)
+    (LFloat x) - (LFloat y) = LFloat (x - y)
+    (LRational x) - (LRational y) = LRational (x - y)
+
 
 instance Integral LispVal where
     div (LInteger i) (LInteger j) = LInteger $ div i j
@@ -45,6 +56,17 @@ instance Integral LispVal where
 instance Enum LispVal where
     fromEnum (LInteger x) = fromInteger x
     toEnum x = LInteger (fromIntegral x)
+
+instance Fractional LispVal where
+    (LInteger x) / (LInteger y) = LRational (x % y)
+    (LFloat x) / (LFloat y) = LFloat (x / y)
+    (LRational x) / (LRational y) = LRational (x / y)
+    (LInteger x) / (LFloat y) = LFloat (fromInteger x / y)
+    (LFloat x) / (LInteger y) = LFloat (x / fromInteger y)
+    (LRational x) / (LInteger y) = LRational (x / fromInteger y)
+    (LInteger x) / (LRational y) = LRational (fromInteger x / y)
+    (LFloat x) / (LRational y) = LRational (toRational x / y)
+    (LRational x) / (LFloat y) = LRational (x / toRational y)
 
 instance Eq LispVal where
     (LInteger x) == (LInteger y) = x == y

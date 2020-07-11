@@ -23,7 +23,7 @@ primitives :: [(String, [LispVal] -> LispVal)]
 primitives = [ ("+", numericBinOp (+))
              , ("-", numericBinOp (-))
              , ("*", numericBinOp (*))
-             , ("/", numericBinOp div)
+             , ("/", numericBinOp (/))
              , ("mod", numericBinOp mod)
              , ("quotient", numericBinOp quot)
              , ("remainder", numericBinOp rem)
