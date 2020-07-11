@@ -106,7 +106,7 @@ showVal (LInteger contents) = show contents
 showVal (LFloat contents) = show contents
 showVal (LRational contents) = show (numerator contents) ++ "/" ++ show (denominator contents)
 showVal (LComplex (Polar r t)) = showVal r ++ "@" ++ showVal t
-showVal (LComplex (Cart r t)) = showVal r ++ "+" ++ showVal t ++ "i"  -- HANDLE NEGATIVE
+showVal (LComplex (Cart r t)) = showVal r ++ (if t >= LFloat 0 then "+" else "") ++ showVal t ++ "i"  -- HANDLE NEGATIVE
 showVal (LChar c) = "#\\" ++ [c]
 showVal (LList contents) = "(" ++ unwordsList contents ++ ")"
 showVal (LVector contents) = "#(" ++ unwordsList contents ++ ")"

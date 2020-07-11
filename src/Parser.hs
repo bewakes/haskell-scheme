@@ -66,11 +66,12 @@ parseRationalSuffix = (++) <$> string "/" <*> parseDecimalIntStr
 -- TODO: negatives
 parseReal :: Parser LispVal
 parseReal = do
+    minus <- string "-" <|> return ""
     number <- parseDecimalIntStr
     rest <- parseDecimalSuffix <|> parseRationalSuffix <|> return ""
-    let getType intStr ('.':decStr) = LFloat $ read (intStr ++ "." ++ decStr)
-        getType intStr "" = LInteger $ read intStr
-        getType intStr ('/':denStr) = LRational $ toRational $ read intStr  % read denStr
+    let getType intStr ('.':decStr) = LFloat $ read (minus ++ intStr ++ "." ++ decStr)
+        getType intStr "" = LInteger $ read (minus ++ intStr)
+        getType intStr ('/':denStr) = LRational $ toRational $ read (minus ++ intStr)  % read denStr
         in return $ getType number rest
 
 ---Parsers for diffrent number bases
@@ -91,9 +92,9 @@ parseComplex = do
 
 parseExpr :: Parser LispVal
 parseExpr = try (hash >> (parseOctalNoHash <|> parseHexNoHash <|> parseBinaryNoHash <|> parseCharNoHash <|> parseVectorNoHash))
-         <|> parseAtom
          <|> try parseComplex
-         <|> parseReal
+         <|> try parseReal
+         <|> parseAtom
          <|> parseString
          <|> parseQuoted
          <|> parseCommaList
