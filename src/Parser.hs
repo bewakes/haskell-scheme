@@ -72,16 +72,11 @@ parseReal = do
         getType intStr ('/':denStr) = LRational $ toRational $ read intStr  % read denStr
         in return $ getType number rest
 
---TODO: negatives
-parseNumber :: Parser LispVal
-parseNumber = try hexadecimal <|> try octal <|> decimal
-
 ---Parsers for diffrent number bases
-decimal, octal, hexadecimal, binary :: Parser LispVal
-decimal = LInteger . read <$> parseDecimalIntStr
-octal = LInteger . parseOct <$> ((string "#o" <|> string "#O") >> many1 (oneOf "01234567"))
-hexadecimal = LInteger . parseHex <$> ((string "#x" <|> string "#X") >> many1 (oneOf "0123456789abcdef"))
-binary = LInteger . parseBinary <$> ((string "#b" <|> string "#B") >> many1 (oneOf "01"))
+parseOctalNoHash, parseHexNoHash, parseBinaryNoHash:: Parser LispVal
+parseOctalNoHash = LInteger . parseOct <$> ((string "o" <|> string "O") >> many1 (oneOf "01234567"))
+parseHexNoHash = LInteger . parseHex <$> ((string "x" <|> string "X") >> many1 (oneOf "0123456789abcdef"))
+parseBinaryNoHash = LInteger . parseBinary <$> ((string "b" <|> string "B") >> many1 (oneOf "01"))
 
 parseComplex :: Parser LispVal
 parseComplex = do
@@ -94,11 +89,10 @@ parseComplex = do
      in return $ getComplex pref sep suff
 
 parseExpr :: Parser LispVal
-parseExpr = try (hash >> (parseCharNoHash <|> parseVectorNoHash))
+parseExpr = try (hash >> (parseOctalNoHash <|> parseHexNoHash <|> parseBinaryNoHash <|> parseCharNoHash <|> parseVectorNoHash))
          <|> parseAtom
          <|> try parseComplex
          <|> parseReal
-         <|> parseNumber
          <|> parseString
          <|> parseQuoted
          <|> parseCommaList
