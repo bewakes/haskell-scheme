@@ -1,5 +1,6 @@
 module Parser where
 
+import           Control.Monad.Except
 import           Data.List
 import           Data.Ratio
 import           Numeric
@@ -7,6 +8,7 @@ import           System.Environment
 import           Text.ParserCombinators.Parsec hiding (spaces)
 
 import           Lisp
+import           LispError
 
 symbol :: Parser Char
 symbol = oneOf "!#$%&|*+-/:<=>?@^_~"
@@ -139,7 +141,7 @@ parseVectorNoHash = do
     LList x <- parseList
     return $ LVector x
 
-readExpr :: String -> LispVal
+readExpr :: String -> ThrowsError LispVal
 readExpr input = case parse parseExpr "lisp" input of
-                   Left err  -> LString $ "No match: " ++ show err
-                   Right val -> val
+                   Left err  -> throwError $ Parser err
+                   Right val -> return val

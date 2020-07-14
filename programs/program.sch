@@ -1,5 +1,5 @@
-(/ 2.3 3 (- 4 1))
+(+ 3)
 (number? "bibek")
 (integer? (+ 3 4))
-(complex? (- 2 3))
-(complex? 2@3)
+(symbol? "bibek")
+(symbol? bibek)

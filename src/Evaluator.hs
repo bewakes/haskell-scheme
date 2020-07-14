@@ -1,22 +1,25 @@
 module Evaluator where
 
+import Control.Monad
+import Control.Monad.Except
 import Lisp
+import LispError
 
-eval :: LispVal -> LispVal
-eval val@(LString _) = val
-eval val@(LBool _) = val
-eval val@(LInteger _) = val
-eval val@(LRational _) = val
-eval val@(LChar _) = val
-eval val@(LFloat _) = val
-eval val@(LComplex _) = val
-eval (LList [LAtom "quote", val]) = val
-eval (LList (LAtom func : args)) = apply func $ map eval args
+eval :: LispVal -> ThrowsError LispVal
+eval val@(LString _) = return val
+eval val@(LBool _) = return val
+eval val@(LInteger _) = return val
+eval val@(LRational _) = return val
+eval val@(LChar _) = return val
+eval val@(LFloat _) = return val
+eval val@(LComplex _) = return val
+eval (LList (LAtom func : args)) = mapM eval args >>= apply func
 
-apply :: String -> [LispVal] -> LispVal
-apply func args = maybe (LBool False) ($ args) $ lookup func primitives
+apply :: String -> [LispVal] -> ThrowsError LispVal
+apply func args = maybe (throwError $ NotFunction "Unrecognized primitive function args" func)
+    ($ args) $ lookup func primitives
 
-primitives :: [(String, [LispVal] -> LispVal)]
+primitives :: [(String, [LispVal] -> ThrowsError LispVal)]
 primitives = [ ("+", numericBinOp (+))
              , ("-", numericBinOp (-))
              , ("*", numericBinOp (*))
@@ -33,38 +36,46 @@ primitives = [ ("+", numericBinOp (+))
              , ("complex?", checkComplex)
              , ("rational?", checkRational)
              , ("list?", checkList)
+             , ("char?", checkChar)
              ]
 
-numericBinOp :: (LispVal -> LispVal -> LispVal) -> [LispVal] -> LispVal
-numericBinOp = foldl1
+-- TODO: Symbol Handling function ??
+
+numericBinOp :: (LispVal -> LispVal -> LispVal) -> [LispVal] -> ThrowsError LispVal
+numericBinOp func [] = throwError $ NumArgs 2 []
+numericBinOp func val@[_] = throwError $ NumArgs 2 val
+numericBinOp func vals = return $ foldl1 func vals
 
 lTrue = LBool True
 lFalse = LBool False
 -- Type checking
-checkSymbol, checkNumber, checkString, checkFloat, checkComplex, checkRational, checkList, checkInteger :: [LispVal] -> LispVal
-checkSymbol [LAtom _] = lTrue
-checkSymbol _ = lFalse
+checkSymbol, checkNumber, checkString, checkFloat, checkChar, checkComplex, checkRational, checkList, checkInteger :: [LispVal] -> ThrowsError LispVal
+checkSymbol [LAtom _] = return lTrue
+checkSymbol _ = return lFalse
 
-checkNumber [LInteger _] = lTrue
-checkNumber [LRational _] = lTrue
-checkNumber [LFloat _] = lTrue
-checkNumber _ = lFalse
+checkChar [LChar _] = return lTrue
+checkChar _ = return lFalse
 
-checkString [LString _] = lTrue
-checkString _ = lFalse
+checkNumber [LInteger _] = return lTrue
+checkNumber [LRational _] = return lTrue
+checkNumber [LFloat _] = return lTrue
+checkNumber _ = return lFalse
 
-checkInteger [LInteger _] = lTrue
-checkInteger _ = lFalse
+checkString [LString _] = return lTrue
+checkString _ = return lFalse
 
-checkFloat [LFloat _] = lTrue
-checkFloat _ = lFalse
+checkInteger [LInteger _] = return lTrue
+checkInteger _ = return lFalse
 
-checkComplex [LComplex _] = lTrue
-checkComplex _ = lFalse
+checkFloat [LFloat _] = return lTrue
+checkFloat _ = return lFalse
 
-checkRational [LRational _] = lTrue
-checkRational _ = lFalse
+checkComplex [LComplex _] = return lTrue
+checkComplex _ = return lFalse
 
-checkList [LList _] = lTrue
-checkList [LDottedList _ _] = lTrue
-checkList _ = lFalse
+checkRational [LRational _] = return lTrue
+checkRational _ = return lFalse
+
+checkList [LList _] = return lTrue
+checkList [LDottedList _ _] = return lTrue
+checkList _ = return lFalse
