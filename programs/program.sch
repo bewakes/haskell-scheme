@@ -1,5 +1,6 @@
-(+ 3)
-(number? "bibek")
+(string<=? "a" "bbb")
+(|| (< 3 4) (= 5 7))
+(string? "bibek")
 (integer? (+ 3 4))
 (symbol? "bibek")
 (symbol? bibek)

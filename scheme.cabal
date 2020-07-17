@@ -28,6 +28,7 @@ library
       Evaluator
       Lisp
       LispError
+      LispType
       Parser
   other-modules:
       Paths_scheme

@@ -18,6 +18,7 @@ data LispVal = LAtom String
              | LRational Rational
              | LComplex Complex
 
+
 instance Num LispVal where
     (LInteger i) + (LInteger j) = LInteger (i + j)
     (LInteger i) + (LFloat j) = LFloat (fromInteger i + j)
