@@ -8,13 +8,14 @@ import           LispType
 
 eval :: LispVal -> ThrowsError LispVal
 eval val@(LString _)               = return val
+eval val@(LAtom _)               = return val
 eval val@(LBool _)                 = return val
 eval val@(LInteger _)              = return val
 eval val@(LRational _)             = return val
 eval val@(LChar _)                 = return val
 eval val@(LFloat _)                = return val
 eval val@(LComplex _)              = return val
-eval (LList [LAtom "quote", args]) = return args
+eval val@(LList [LAtom "quote", args]) = return val
 eval (LList (LAtom "case": args)) = caseL args
 eval (LList (LAtom func : args))   = mapM eval args >>= apply func
 eval (LList xs)                    = do
@@ -132,6 +133,7 @@ cdr [badArg]               = throwError $ TypeMismatch "pair" badArg
 cdr badArgsList            = throwError $ NumArgs 1 badArgsList
 
 cons :: [LispVal] -> ThrowsError LispVal
+cons [LAtom x, LList []]       = throwError $ BadSpecialForm "Unrecognized bad special form" (LAtom x)
 cons [x1, LList []]            = return $ LList [x1]
 cons [x, LList xs]             = return $ LList $ x: xs
 cons [x, LDottedList xs xlast] = return $ LDottedList (x:xs) xlast
