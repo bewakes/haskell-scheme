@@ -14,5 +14,6 @@ evalString x = extractValue $ trapError $ show <$> (readExpr x >>= eval)
 main :: IO ()
 main = do
   fileContent <- readFile "programs/program.sch"
-  let evaled = map evalString . lines $ fileContent
-  print $ unlines evaled
+  let statements = lines fileContent
+      evaled = map evalString statements
+  mapM_ print $ zipWith (\x y -> x ++ " ---> " ++ y) statements evaled

@@ -15,13 +15,18 @@ eval val@(LChar _)                 = return val
 eval val@(LFloat _)                = return val
 eval val@(LComplex _)              = return val
 eval (LList [LAtom "quote", args]) = return args
+eval (LList (LAtom "case": args)) = caseL args
 eval (LList (LAtom func : args))   = mapM eval args >>= apply func
+eval (LList xs)                    = do
+        vals <- mapM eval xs
+        return $ LList vals
 
 apply :: String -> [LispVal] -> ThrowsError LispVal
 -- TODO: enforce same type for conseq and alt
 apply "if" [LBool True, conseq, _] = return conseq
 apply "if" [LBool False, _, alt] = return alt
 apply "if" unmatched = throwError $ NumArgs 3 unmatched
+apply "else" [elseVal] = return $ LList [LAtom "else", elseVal]
 
 -- rest of the functions
 apply func args = maybe (throwError $ NotFunction "Unrecognized primitive function args" func)
@@ -70,6 +75,8 @@ primitives = [
              , ("eq?", eqv)
              , ("eqv?", eqv)
              , ("equal?", eqv)  -- NOTE: Ommiting weak checking for now
+             , ("cond", cond)
+             -- , ("case", caseL)
              ]
 
 -- TODO: Symbol Handling function ??
@@ -112,24 +119,24 @@ numericBinOp func vals = case checkAllNumbers vals of
 
 -- List primitives
 car :: [LispVal] -> ThrowsError LispVal
-car [LList (x: xs)] = return x
+car [LList (x: xs)]         = return x
 car [LDottedList (x: xs) _] = return x
-car [badArg] = throwError $ TypeMismatch "pair" badArg
-car badArgsList = throwError $ NumArgs 1 badArgsList
+car [badArg]                = throwError $ TypeMismatch "pair" badArg
+car badArgsList             = throwError $ NumArgs 1 badArgsList
 
 cdr :: [LispVal] -> ThrowsError LispVal
-cdr [LList (x: xs)] = return $ LList xs
-cdr [LDottedList [_] x] = return x
+cdr [LList (x: xs)]        = return $ LList xs
+cdr [LDottedList [_] x]    = return x
 cdr [LDottedList (_:xs) x] = return $ LDottedList xs x
-cdr [badArg] = throwError $ TypeMismatch "pair" badArg
-cdr badArgsList = throwError $ NumArgs 1 badArgsList
+cdr [badArg]               = throwError $ TypeMismatch "pair" badArg
+cdr badArgsList            = throwError $ NumArgs 1 badArgsList
 
 cons :: [LispVal] -> ThrowsError LispVal
-cons [x1, LList []] = return $ LList [x1]
-cons [x, LList xs] = return $ LList $ x: xs
+cons [x1, LList []]            = return $ LList [x1]
+cons [x, LList xs]             = return $ LList $ x: xs
 cons [x, LDottedList xs xlast] = return $ LDottedList (x:xs) xlast
-cons [x1, x2] = return $ LDottedList [x1] x2
-cons badArgList = throwError $ NumArgs 2 badArgList
+cons [x1, x2]                  = return $ LDottedList [x1] x2
+cons badArgList                = throwError $ NumArgs 2 badArgList
 
 
 eqv :: [LispVal] -> ThrowsError LispVal
@@ -139,11 +146,28 @@ eqv [LString a, LString b] = return $ LBool $ a == b
 eqv [LAtom a, LAtom b] = return $ LBool $ a == b
 eqv [LList a, LList b] = return $ LBool $ (length a == length b) && all eqvPair (zip a b)
     where eqvPair (x1, x2) = case eqv [x1, x2] of
-                               Left _ -> False
+                               Left _            -> False
                                Right (LBool val) -> val
 
 eqv [a, b] = return $ case checkAllNumbers [a, b] of
-               Left _ -> LBool False
+               Left _  -> LBool False
                Right _ -> LBool $ a == b
 eqv badArgList = throwError $ NumArgs  2 badArgList
 
+cond :: [LispVal] -> ThrowsError LispVal
+cond [LList []] = return $ LList []
+cond [LList [LAtom "else", elseVal]] = return elseVal  -- this is matching condition for else
+cond (LList [LBool True, val]: _) = return val
+cond (LList [LBool False, _]: restCond) = cond restCond
+cond (x:xs) = throwError $ BadSpecialForm "Invalid arg for `cond`" x
+
+caseL :: [LispVal] -> ThrowsError LispVal
+caseL (lst@(LList _): datumList) = eval lst >>= (`checkValueForDatumMatch` datumList)
+    where checkValueForDatumMatch :: LispVal -> [LispVal] -> ThrowsError LispVal
+          checkValueForDatumMatch value [LList [LAtom "else", val]] = return val
+          checkValueForDatumMatch value (LList [LList datum, val]: remainingDatum) = if isValueInList value datum
+                                                                                  then return val
+                                                                                  else checkValueForDatumMatch value remainingDatum
+          checkValueForDatumMatch _ [] = throwError $ BadSpecialForm "Invalid number of args for `case`" (LList [])
+          checkValueForDatumMatch _ invalidArgs = throwError $ BadSpecialForm "Invalid args for `case`" (LList invalidArgs)
+          isValueInList lispVal = foldr (\x a -> if a then a else case eqv [lispVal, x] of Right (LBool True) -> True; Right (LBool False) -> False) False
