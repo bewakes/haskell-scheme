@@ -113,8 +113,10 @@ parseList = do
 
 parseDottedList :: Parser LispVal
 parseDottedList = do
+    char '('
     head <- endBy parseExpr spaces
     tail <- char '.' >> spaces >> parseExpr
+    char ')'
     return $ LDottedList head tail
 
 -- Single quote syntactic sugar of Scheme

@@ -15,4 +15,4 @@ main :: IO ()
 main = do
   fileContent <- readFile "programs/program.sch"
   let evaled = map evalString . lines $ fileContent
-  print evaled
+  print $ unlines evaled

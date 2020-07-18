@@ -110,6 +110,7 @@ showVal (LComplex (Polar r t)) = showVal r ++ "@" ++ showVal t
 showVal (LComplex (Cart r t)) = showVal r ++ (if t >= LFloat 0 then "+" else "") ++ showVal t ++ "i"  -- HANDLE NEGATIVE
 showVal (LChar c) = "#\\" ++ [c]
 showVal (LList contents) = "(" ++ unwordsList contents ++ ")"
+showVal (LDottedList head tail) = "(" ++ unwordsList head ++ " . " ++ show tail ++ ")"
 showVal (LVector contents) = "#(" ++ unwordsList contents ++ ")"
 
 unwordsList :: [LispVal] -> String
