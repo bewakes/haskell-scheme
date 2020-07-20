@@ -133,8 +133,10 @@ cdr [badArg]               = throwError $ TypeMismatch "pair" badArg
 cdr badArgsList            = throwError $ NumArgs 1 badArgsList
 
 cons :: [LispVal] -> ThrowsError LispVal
-cons [LAtom x, LList []]       = throwError $ BadSpecialForm "Unrecognized bad special form" (LAtom x)
+cons [LAtom x, _]       = throwError $ BadSpecialForm "Unrecognized special form" (LAtom x)
 cons [x1, LList []]            = return $ LList [x1]
+cons [x1, LList [LAtom "quote", LList []]]            = return $ LList [x1]
+-- cons [quoted@(LList (LAtom "quote": xs)), LList []]            = return quoted
 cons [x, LList xs]             = return $ LList $ x: xs
 cons [x, LDottedList xs xlast] = return $ LDottedList (x:xs) xlast
 cons [x1, x2]                  = return $ LDottedList [x1] x2
