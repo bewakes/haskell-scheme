@@ -2,25 +2,98 @@ module Evaluator where
 
 import           Control.Monad
 import           Control.Monad.Except
+import           Data.IORef
+import           Data.Maybe
 import           Lisp
 import           LispError
 import           LispType
 
-eval :: LispVal -> ThrowsError LispVal
-eval val@(LString _)               = return val
-eval val@(LAtom _)               = return val
-eval val@(LBool _)                 = return val
-eval val@(LInteger _)              = return val
-eval val@(LRational _)             = return val
-eval val@(LChar _)                 = return val
-eval val@(LFloat _)                = return val
-eval val@(LComplex _)              = return val
-eval val@(LList [LAtom "quote", args]) = return val
-eval (LList (LAtom "case": args)) = caseL args
-eval (LList (LAtom func : args))   = mapM eval args >>= apply func
-eval (LList xs)                    = do
-        vals <- mapM eval xs
-        return $ LList vals
+type Env = IORef [(String, IORef LispVal)]
+type IOThrowsError = ExceptT LispError IO
+
+liftThrows :: ThrowsError a -> IOThrowsError a
+liftThrows (Left err)  = throwError err
+liftThrows (Right val) =  return val
+
+nullEnv :: IO Env
+nullEnv = newIORef []
+
+runIOThrows :: IOThrowsError String -> IO String
+runIOThrows action = extractValue <$> runExceptT (trapError action)
+
+isBound :: Env -> String -> IO Bool
+isBound envRef var = isJust . lookup var <$> readIORef envRef
+
+getVar :: Env -> String -> IOThrowsError LispVal
+getVar envRef var = do
+    env <- liftIO $ readIORef envRef
+    maybe (throwError $ UnboundVar "Got an unbound var" var)
+        (liftIO . readIORef)
+        (lookup var env)
+
+setVar :: Env -> String -> LispVal -> IOThrowsError LispVal
+setVar envref var value = do
+    env <- liftIO $ readIORef envref
+    maybe (throwError $ UnboundVar "Setting an unbound variable" var)
+          (liftIO . (`writeIORef` value))
+          (lookup var env)
+    return value
+
+defineVar :: Env -> String -> LispVal -> IOThrowsError LispVal
+defineVar envRef var value = do
+    alreadyDefined <- liftIO $ isBound envRef var
+    if alreadyDefined
+       then setVar envRef var value
+    else liftIO $ do
+        valueRef <- newIORef value
+        env <- readIORef envRef
+        writeIORef envRef ((var, valueRef) : env)
+        return value
+
+bindVars :: Env -> [(String, LispVal)] -> IO Env
+bindVars envRef bindings = readIORef envRef >>= extendEnv bindings >>= newIORef
+    where extendEnv bindings env = (++ env) <$> mapM addBinding bindings
+          addBinding (var, value) = do ref <- newIORef value
+                                       return (var, ref)
+
+eval :: Env -> LispVal -> IOThrowsError LispVal
+eval env val@(LString _)               = return val
+eval env val@(LAtom id)               = getVar env id
+eval env val@(LBool _)                 = return val
+eval env val@(LInteger _)              = return val
+eval env val@(LRational _)             = return val
+eval env val@(LChar _)                 = return val
+eval env val@(LFloat _)                = return val
+eval env val@(LComplex _)              = return val
+eval env val@(LList [LAtom "quote", args]) = return val
+eval env (LList [LAtom "if", pred, conseq, alt]) =
+    do
+        result <- eval env pred
+        case result of
+          LBool False -> eval env alt
+          _           -> eval env conseq
+
+eval env (LList [LAtom "case", caseValExpr]) = return $ LList []
+eval env (LList [LAtom "case", caseValExpr, LList [LAtom "else", val]]) = eval env val
+eval env (LList (LAtom "case": caseValExpr: dataSeqsResults)) =
+    do
+        val <- eval env caseValExpr
+        checkCase val dataSeqsResults
+    where checkCase val [] = return $ LList []
+          checkCase val [LList [LAtom "else", res]] = eval env res
+          checkCase val (LList [LList dataSeq, res]: xs) = do
+              evaledVals <- mapM (eval env) dataSeq
+              let found = any (areEquivalent val) evaledVals
+              if found then eval env res
+                       else checkCase val xs
+
+eval env (LList [LAtom "set!", LAtom var, form]) =
+    eval env form >>= setVar env var
+eval env (LList [LAtom "define", LAtom var, form]) =
+    eval env form >>= defineVar env var
+eval env (LList (LAtom func : args))   = mapM (eval env) args >>= liftThrows . apply func
+-- eval env (LList (LAtom "case": args)) = caseL args
+eval env badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
 
 apply :: String -> [LispVal] -> ThrowsError LispVal
 -- TODO: enforce same type for conseq and alt
@@ -143,15 +216,18 @@ cons [x1, x2]                  = return $ LDottedList [x1] x2
 cons badArgList                = throwError $ NumArgs 2 badArgList
 
 
+areEquivalent :: LispVal -> LispVal -> Bool
+areEquivalent a b = case eqv [a, b] of
+    Left _              -> False
+    Right ( LBool True) -> True
+    _                   -> False
+
 eqv :: [LispVal] -> ThrowsError LispVal
 eqv [LBool a, LBool b] = return $ LBool $ a == b
 eqv [LChar a, LChar b] = return $ LBool $ a == b
 eqv [LString a, LString b] = return $ LBool $ a == b
 eqv [LAtom a, LAtom b] = return $ LBool $ a == b
-eqv [LList a, LList b] = return $ LBool $ (length a == length b) && all eqvPair (zip a b)
-    where eqvPair (x1, x2) = case eqv [x1, x2] of
-                               Left _            -> False
-                               Right (LBool val) -> val
+eqv [LList a, LList b] = return $ LBool $ (length a == length b) && and (zipWith areEquivalent a b)
 
 eqv [a, b] = return $ case checkAllNumbers [a, b] of
                Left _  -> LBool False
@@ -164,14 +240,3 @@ cond [LList [LAtom "else", elseVal]] = return elseVal  -- this is matching condi
 cond (LList [LBool True, val]: _) = return val
 cond (LList [LBool False, _]: restCond) = cond restCond
 cond (x:xs) = throwError $ BadSpecialForm "Invalid arg for `cond`" x
-
-caseL :: [LispVal] -> ThrowsError LispVal
-caseL (lst@(LList _): datumList) = eval lst >>= (`checkValueForDatumMatch` datumList)
-    where checkValueForDatumMatch :: LispVal -> [LispVal] -> ThrowsError LispVal
-          checkValueForDatumMatch value [LList [LAtom "else", val]] = return val
-          checkValueForDatumMatch value (LList [LList datum, val]: remainingDatum) = if isValueInList value datum
-                                                                                  then return val
-                                                                                  else checkValueForDatumMatch value remainingDatum
-          checkValueForDatumMatch _ [] = throwError $ BadSpecialForm "Invalid number of args for `case`" (LList [])
-          checkValueForDatumMatch _ invalidArgs = throwError $ BadSpecialForm "Invalid args for `case`" (LList invalidArgs)
-          isValueInList lispVal = foldr (\x a -> if a then a else case eqv [lispVal, x] of Right (LBool True) -> True; Right (LBool False) -> False) False

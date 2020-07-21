@@ -1,6 +1,7 @@
 module Main where
 
 import           Control.Monad
+import           Control.Monad.Except
 import           System.IO
 
 import           Evaluator
@@ -8,13 +9,11 @@ import           Lisp
 import           LispError
 import           Parser
 
-evalString :: String -> String
-evalString x = extractValue $ trapError $ show <$> (readExpr x >>= eval)
+evalString :: Env -> String -> IO String
+evalString env x = runIOThrows $ show <$> (liftThrows (readExpr x) >>= eval env)
 
-evalAndPrint :: String -> IO ()
-evalAndPrint expr = do
-    let evaled = evalString expr
-    putStrLn evaled
+evalAndPrint :: Env -> String -> IO ()
+evalAndPrint env expr = evalString env expr >>= putStrLn
 
 -- print a string and immediately flush the stream, otherwise output might sit in output buffers
 -- and user will never see prompts or results
@@ -31,15 +30,20 @@ until_ pred prompt action = do
        then return ()
        else action result >> until_ pred prompt action
 
+runOne :: String -> IO ()
+runOne expr = nullEnv >>= (`evalAndPrint` expr)
+
+
 runRepl :: IO ()
-runRepl = until_ (== "quit") (readPrompt "Lisp>>> ") evalAndPrint
+runRepl = nullEnv >>= until_ (== "quit") (readPrompt "> ") . evalAndPrint
 
 runFile :: IO ()
 runFile = do
   fileContent <- readFile "programs/program.sch"
+  env <- nullEnv
   let statements = lines fileContent
-      evaled = map evalString statements
-  mapM_ print $ zipWith (\x y -> x ++ " ---> " ++ y) statements evaled
+  lst <- mapM (evalString env) statements
+  mapM_ print $ zipWith (\x y -> x ++ " ---> " ++ y) statements lst
 
 main :: IO ()
 main = runRepl
