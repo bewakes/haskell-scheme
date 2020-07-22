@@ -5,11 +5,7 @@ import           Control.Monad.Except
 import           Data.IORef
 import           Data.Maybe
 import           Lisp
-import           LispError
 import           LispType
-
-type Env = IORef [(String, IORef LispVal)]
-type IOThrowsError = ExceptT LispError IO
 
 liftThrows :: ThrowsError a -> IOThrowsError a
 liftThrows (Left err)  = throwError err

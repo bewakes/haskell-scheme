@@ -1,6 +1,9 @@
 module Lisp where
 
-import Data.Ratio
+import           Control.Monad.Except
+import           Data.IORef
+import           Data.Ratio
+import           Text.Parsec.Error
 
 data Complex = Polar LispVal LispVal
              | Cart LispVal LispVal
@@ -18,6 +21,40 @@ data LispVal = LAtom String
              | LRational Rational
              | LComplex Complex
 
+
+type Env = IORef [(String, IORef LispVal)]
+
+-- LISP errors
+data LispError = NumArgs Integer [LispVal]
+               | TypeMismatch String LispVal
+               | Parser ParseError
+               | BadSpecialForm String LispVal
+               | NotFunction String String
+               | UnboundVar String String
+               | Default String
+
+showError :: LispError -> String
+showError (UnboundVar message varname) = message ++ ": " ++ varname
+showError (BadSpecialForm message form) = message ++ ": " ++ show form
+showError (NotFunction message func) = message ++ ": " ++ show func
+showError (NumArgs expected found) = "Expected " ++ show expected ++ " args; found values " ++ unwordsList found
+showError (TypeMismatch expected found) = "Invalid type: expected " ++ expected ++ ", found " ++ show found
+showError (Parser parseErr) = "Parse error at " ++ show parseErr
+
+instance Show LispError where show = showError
+
+
+-- Define a type to represent functions that may throw a LispError or return a value
+type ThrowsError = Either LispError
+type IOThrowsError = ExceptT LispError IO
+
+-- We convert all our errors to their string representations and return that as normal value
+trapError action = catchError action (return . show)
+
+extractValue :: ThrowsError a -> a
+extractValue (Right val) = val
+
+-- INSTANCES
 
 instance Num LispVal where
     (LInteger i) + (LInteger j) = LInteger (i + j)
@@ -80,22 +117,22 @@ instance Eq LispVal where
     (LFloat y) == (LRational x) = x == toRational y
 
 instance Ord LispVal where
-    compare (LInteger x) (LInteger y) = compare x y
-    compare (LFloat x) (LInteger y) = compare x (fromInteger y)
-    compare (LInteger x) (LFloat y) = compare (fromInteger x) y
+    compare (LInteger x) (LInteger y)  = compare x y
+    compare (LFloat x) (LInteger y)    = compare x (fromInteger y)
+    compare (LInteger x) (LFloat y)    = compare (fromInteger x) y
     compare (LRational x) (LInteger y) = compare x (fromInteger y)
     compare (LInteger x) (LRational y) = compare (fromInteger x) y
 
-    compare (LRational x) (LFloat y) = compare x (toRational y)
-    compare (LFloat x) (LRational y) = compare (toRational x) y
+    compare (LRational x) (LFloat y)   = compare x (toRational y)
+    compare (LFloat x) (LRational y)   = compare (toRational x) y
 
 instance Real LispVal where
     toRational (LInteger x) = toRational (x % 1)
 
 
 negateLispReal :: LispVal -> LispVal
-negateLispReal (LInteger x) = LInteger (-x)
-negateLispReal (LFloat x) = LFloat (-x)
+negateLispReal (LInteger x)  = LInteger (-x)
+negateLispReal (LFloat x)    = LFloat (-x)
 negateLispReal (LRational x) = LRational (-x)
 
 showVal :: LispVal -> String

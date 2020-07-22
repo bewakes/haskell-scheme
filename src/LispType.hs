@@ -1,7 +1,6 @@
 module LispType where
 
 import Lisp
-import LispError
 
 checkIfNumber :: LispVal -> Either LispVal Bool
 checkIfNumber (LInteger _) = return True

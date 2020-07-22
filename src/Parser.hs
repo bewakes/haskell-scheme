@@ -8,7 +8,6 @@ import           System.Environment
 import           Text.ParserCombinators.Parsec hiding (spaces)
 
 import           Lisp
-import           LispError
 
 symbol :: Parser Char
 symbol = oneOf "!#$%&|*+-/:<=>?@^_~"

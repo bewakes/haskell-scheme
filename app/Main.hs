@@ -6,7 +6,6 @@ import           System.IO
 
 import           Evaluator
 import           Lisp
-import           LispError
 import           Parser
 
 evalString :: Env -> String -> IO String

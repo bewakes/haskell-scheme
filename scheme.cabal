@@ -27,7 +27,6 @@ library
   exposed-modules:
       Evaluator
       Lisp
-      LispError
       LispType
       Parser
   other-modules:
