@@ -20,6 +20,12 @@ data LispVal = LAtom String
              | LFloat Float
              | LRational Rational
              | LComplex Complex
+             | LPrimitiveFunc ([LispVal] -> ThrowsError LispVal)
+             | LFunc {
+                       params :: [String]
+                     , vararg :: Maybe String
+                     , body :: [LispVal], closure :: Env
+                     }
 
 
 type Env = IORef [(String, IORef LispVal)]
@@ -150,6 +156,13 @@ showVal (LList (LAtom "quote": rest)) = "'" ++ unwordsList rest
 showVal (LList contents) = "(" ++ unwordsList contents ++ ")"
 showVal (LDottedList head tail) = "(" ++ unwordsList head ++ " . " ++ show tail ++ ")"
 showVal (LVector contents) = "#(" ++ unwordsList contents ++ ")"
+showVal (LPrimitiveFunc _) = "<primitive>"
+showVal LFunc {params = args, vararg = varargs, body = body, closure = env} =
+   "(lambda (" ++ unwords (map show args) ++
+      (case varargs of
+         Nothing -> ""
+         Just arg -> " . " ++ arg) ++ ") ...)"
+
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal

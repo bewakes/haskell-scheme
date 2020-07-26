@@ -85,22 +85,47 @@ eval env (LList (LAtom "case": caseValExpr: dataSeqsResults)) =
 
 eval env (LList [LAtom "set!", LAtom var, form]) =
     eval env form >>= setVar env var
-eval env (LList [LAtom "define", LAtom var, form]) =
-    eval env form >>= defineVar env var
-eval env (LList (LAtom func : args))   = mapM (eval env) args >>= liftThrows . apply func
--- eval env (LList (LAtom "case": args)) = caseL args
+eval env (LList (LAtom "define": [LAtom var, val])) =
+    eval env val >>= defineVar env var
+eval env (LList (LAtom "define": LList (LAtom var: params): body)) =
+    makeNormalFunc env params body >>= defineVar env var
+eval env (LList (LAtom "define" : LDottedList (LAtom var : params) varargs : body )) =
+    makeVarArgs varargs env params body >>= defineVar env var
+eval env (LList (LAtom "lambda": LList params: body)) =
+    makeNormalFunc env params body
+eval env (LList (LAtom "lambda": LDottedList params varargs : body)) =
+    makeVarArgs varargs env params body
+eval env (LList (LAtom "lambda": varargs@(LAtom _) : body)) =
+    makeVarArgs varargs env [] body
+eval env (LList (func : args)) = do
+    function <- eval env func
+    evaledArgs <- mapM (eval env) args
+    apply function evaledArgs
+
 eval env badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
 
-apply :: String -> [LispVal] -> ThrowsError LispVal
--- TODO: enforce same type for conseq and alt
-apply "if" [LBool True, conseq, _] = return conseq
-apply "if" [LBool False, _, alt] = return alt
-apply "if" unmatched = throwError $ NumArgs 3 unmatched
-apply "else" [elseVal] = return $ LList [LAtom "else", elseVal]
+makeFunc :: Maybe String -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
+makeFunc varargs env params body = return $ LFunc (map showVal params) varargs body env
+makeNormalFunc = makeFunc Nothing
+makeVarArgs = makeFunc . Just . showVal
 
--- rest of the functions
-apply func args = maybe (throwError $ NotFunction "Unrecognized primitive function args" func)
-    ($ args) $ lookup func primitives
+apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
+-- TODO: enforce same type for conseq and alt
+apply (LPrimitiveFunc func) args = liftThrows $ func args
+apply (LFunc params varargs body closure) args =
+    if num params /= num args && isNothing varargs
+       then throwError $ NumArgs (num params) args
+       else liftIO (bindVars closure $ zip params args) >>= bindVarArgs varargs >>= evalBody
+    where remainingArgs = drop (length params) args
+          num = toInteger . length
+          evalBody env = last <$> mapM (eval env) body
+          bindVarArgs arg env = case arg of
+                                  Just argName -> liftIO $ bindVars env [(argName, LList remainingArgs)]
+                                  Nothing -> return env
+
+primitiveBindings :: IO Env
+primitiveBindings = nullEnv >>= flip bindVars (map makePrimitiveFunc primitives)
+    where makePrimitiveFunc (var, func) = (var, LPrimitiveFunc func)
 
 primitives :: [(String, [LispVal] -> ThrowsError LispVal)]
 primitives = [
