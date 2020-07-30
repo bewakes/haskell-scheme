@@ -1,2 +1,8 @@
 cradle:
     stack:
+        - path: "./app"
+          component: "scheme:exe:scheme-exe"
+        - path: "./src/"
+          component: "scheme:lib"
+        - path: "./test/"
+          component: "scheme:test:scheme-test"
