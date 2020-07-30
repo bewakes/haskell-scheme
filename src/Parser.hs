@@ -47,13 +47,14 @@ parseText = do
     return $ String . T.pack $ p
 
 parseNumber :: Parser LispVal
-parseNumber = parseNegNum <|> Number . read <$> many1 digit
+parseNumber = parseSignedNum <|> (Number . read <$> many1 digit)
 
-parseNegNum :: Parser LispVal
-parseNegNum = do
-    char '-'
+parseSignedNum = do
+    sign <- oneOf "-+"
     d <- many1 digit
-    return $ Number . negate . read $ d
+    case sign of
+      '+' -> return $ Number . read $ d
+      '-' -> return $ Number . negate . read $ d
 
 whiteSpace :: Parser ()
 whiteSpace = do
@@ -69,7 +70,9 @@ parseQuote :: Parser LispVal
 parseQuote = do
     reservedOp "\'"
     x <- parseExpr
-    return $ List [Atom "quote", x]
+    case x of
+      List [] -> return Nil
+      _       -> return $ List [Atom "quote", x]
 
 parseReserved :: Parser LispVal
 parseReserved =

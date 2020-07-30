@@ -30,6 +30,16 @@ data LispVal
     | Bool Bool
     deriving (Typeable)
 
+instance Eq LispVal where
+    Number a == Number b = a == b
+    Atom a == Atom b = a == b
+    String a == String b = a == b
+    Bool a == Bool b = a == b
+
+    Nil == Nil = True
+    _ == Nil = False
+    Nil == _ = False
+
 newtype IFunc = IFunc { fn :: [LispVal] -> Eval LispVal }
 
 instance Show LispVal where

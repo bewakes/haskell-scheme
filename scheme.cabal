@@ -66,6 +66,7 @@ test-suite scheme-test
   build-depends:
       base >=4.7 && <5
     , containers
+    , hspec
     , mtl
     , parsec
     , scheme
