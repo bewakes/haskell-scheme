@@ -35,6 +35,7 @@ instance Eq LispVal where
     Atom a == Atom b = a == b
     String a == String b = a == b
     Bool a == Bool b = a == b
+    List (x: xs) == List (y: ys) = (x == y) && (xs == ys)
 
     Nil == Nil = True
     _ == Nil = False
